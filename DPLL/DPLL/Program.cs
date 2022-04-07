@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Collections;
+using System.Text;
 ParserTest();
 //StructuresTests();
 
@@ -53,7 +54,7 @@ internal class SatDpllSolver
         //End conditions
         if (f.IsEmpty()) return true;
         if (f.HasEmptyClause()) return false;
-
+        
         //Evaluates literals from clauses that contains only one literal
         var x = f.GetFirstSingletonClauseLiteral();
         if (x != null)
@@ -69,9 +70,11 @@ internal class SatDpllSolver
             f.SetLiteral((int)y);
             return IsSatisfiable(f);
         }
-
+        
         //Choose literal to evaluate
         var literal = ChooseLiteral(f);
+        //var literal = Dlis(f);
+        //var literal = Dlcs(f);
 
         //Evaluate literal to true
         var f1 = f.Clone();
@@ -94,11 +97,23 @@ internal class SatDpllSolver
         //Random literal
         return f.Literals[Random.Shared.Next(f.Literals.Count)];
     }
+
+    private int Dlis(Formula f)
+    {
+        return f.MaxFrequentLiteral();
+    }
+
+    private int Dlcs(Formula f)
+    {
+        return f.MaxFrequentLiteralWithNegation();
+    }
 }
 
 internal class Formula
 {
     public List<Clause> Clauses { get; set; }
+
+    public Dictionary<int, int> Frequency { get; set; }
 
     public List<int> Literals
     {
@@ -110,17 +125,18 @@ internal class Formula
     {
         Clauses = new List<Clause>();
         Literals = new List<int>();
+        Frequency = new Dictionary<int, int>();
 
         Clauses.AddRange(c);
-        FixLiterals();
+        Recalculate();
     }
 
     public Formula()
     {
         Clauses = new List<Clause>();
         Literals = new List<int>();
-
-        FixLiterals();
+        Frequency = new Dictionary<int, int>();
+        Recalculate();
     }
 
     public bool IsEmpty()
@@ -151,7 +167,7 @@ internal class Formula
             }
         }
 
-        FixLiterals();
+        Recalculate();
     }
 
     public Formula Clone()
@@ -159,7 +175,7 @@ internal class Formula
         return new Formula(Clauses.Select(c => c.Clone()).ToList());
     }
 
-    public void FixLiterals()
+    public void Recalculate()
     {
         var literals = new List<int>();
         foreach (var clause in Clauses)
@@ -169,7 +185,11 @@ internal class Formula
 
         Literals.Clear();
         Literals.AddRange(literals.Distinct().ToList());
-
+        
+        foreach (var l in Literals)
+        {
+            Frequency[l] = Clauses.Count(x => x.Literals.Contains(l));
+        }
     }
 
     public override string ToString()
@@ -200,7 +220,7 @@ internal class Formula
         {
             using StreamReader s = new(path);
 
-            string line;
+            string? line;
 
             while ((line = s.ReadLine()) != null)
             {
@@ -243,7 +263,7 @@ internal class Formula
                 }
             }
 
-            FixLiterals();
+            Recalculate();
         }
         catch (Exception ex)
         {
@@ -275,6 +295,35 @@ internal class Formula
         }
 
         return null;
+    }
+
+    //DLIS
+    public int MaxFrequentLiteral()
+    {
+        int maxKey = Literals[0];
+        foreach (var l in Literals)
+        {
+            if (Frequency[l] > Frequency[maxKey])
+                maxKey = l;
+        }
+
+        return maxKey;
+    }
+    
+    //DLCS
+    public int MaxFrequentLiteralWithNegation()
+    {
+        var maxKey = Literals[0];
+
+        foreach (var l in Literals)
+        {
+            if (Frequency[l] + Frequency[-l] > Frequency[maxKey] + Frequency[-maxKey])
+                maxKey = l;
+        }
+
+        if (Frequency[-maxKey] > Frequency[maxKey])
+            return -maxKey;        
+        return maxKey;
     }
 }
 
