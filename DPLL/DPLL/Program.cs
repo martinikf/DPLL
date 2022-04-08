@@ -1,5 +1,4 @@
-﻿using System.Collections;
-using System.Text;
+﻿using System.Text;
 ParserTest();
 //StructuresTests();
 
@@ -43,8 +42,8 @@ void ParserTest()
     Formula f = new();
     f.ParseFormulaFromFile(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example1.dimacs"));
     SatDpllSolver solver = new();
-    Console.WriteLine("Is " +f +" satisfiable: " + solver.IsSatisfiable(f));
-    
+    Console.WriteLine("Is " + f + " satisfiable: " + solver.IsSatisfiable(f));
+
 }
 
 internal class SatDpllSolver
@@ -54,7 +53,7 @@ internal class SatDpllSolver
         //End conditions
         if (f.IsEmpty()) return true;
         if (f.HasEmptyClause()) return false;
-        
+
         //Evaluates literals from clauses that contains only one literal
         var x = f.GetFirstSingletonClauseLiteral();
         if (x != null)
@@ -70,11 +69,14 @@ internal class SatDpllSolver
             f.SetLiteral((int)y);
             return IsSatisfiable(f);
         }
-        
+
         //Choose literal to evaluate
         var literal = ChooseLiteral(f);
+
         //var literal = Dlis(f);
         //var literal = Dlcs(f);
+        //var literal = MOM(f);
+        //var litelra = Bohm(f);
 
         //Evaluate literal to true
         var f1 = f.Clone();
@@ -107,6 +109,11 @@ internal class SatDpllSolver
     {
         return f.MaxFrequentLiteralWithNegation();
     }
+
+    private int MOM(Formula f)
+    {
+        return f.MOM();
+    }
 }
 
 internal class Formula
@@ -119,6 +126,21 @@ internal class Formula
     {
         get;
         set;
+    }
+
+    private int FrequencyK(int literal, int k)
+    {
+        int count = 0;
+
+        foreach (var c in Clauses.Where(x => x.Literals.Count == k))
+        {
+            if (c.Literals.Contains(literal))
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     public Formula(IEnumerable<Clause> c)
@@ -185,7 +207,7 @@ internal class Formula
 
         Literals.Clear();
         Literals.AddRange(literals.Distinct().ToList());
-        
+
         foreach (var l in Literals)
         {
             Frequency[l] = Clauses.Count(x => x.Literals.Contains(l));
@@ -226,7 +248,7 @@ internal class Formula
             {
                 if (line.Length <= 0)
                     break;
-                
+
                 switch (line[0])
                 {
                     case 'p':
@@ -309,7 +331,7 @@ internal class Formula
 
         return maxKey;
     }
-    
+
     //DLCS
     public int MaxFrequentLiteralWithNegation()
     {
@@ -322,8 +344,68 @@ internal class Formula
         }
 
         if (Frequency[-maxKey] > Frequency[maxKey])
-            return -maxKey;        
+            return -maxKey;
         return maxKey;
+    }
+
+    //MOM
+    public int MOM()
+    {
+        int p = Literals.Count * Literals.Count + 1;
+        Clause k = Clauses.First();
+
+        foreach (var c in Clauses)
+        {
+            if (c.Literals.Count < k.Literals.Count)
+                k = c;
+        }
+
+        if (k.Literals.Count < 2)
+        {
+            throw new Exception();
+        }
+
+        int literal = k.Literals.First();
+        foreach (var l in Literals)
+        {
+            if ((FrequencyK(l, k.Literals.Count) + FrequencyK(-l, k.Literals.Count)) * p + Frequency[l] * Frequency[-l]
+                >
+                (FrequencyK(literal, k.Literals.Count) + FrequencyK(-literal, k.Literals.Count)) * p + Frequency[literal] * Frequency[-literal])
+                literal = l;
+        }
+
+        return literal;
+    }
+
+    //Bohm
+    public int Bohm()
+    {
+        var p1 = 1;
+        var p2 = 2;
+
+        //Find longest clause
+        int n = Clauses.First().Literals.Count;
+        foreach (var c in Clauses)
+        {
+            if (c.Literals.Count > n)
+                n = c.Literals.Count;
+        }
+
+        Dictionary<int, int> H = new();
+
+        foreach (var l in Literals)
+        {
+            var sum = 0;
+
+            for (int i = 2; i < n; i++)
+            {
+                sum += p1 * Math.Max(FrequencyK(l, i), FrequencyK(-l, i)) +
+                       p2 * Math.Min(FrequencyK(l, i), FrequencyK(-l, i));
+            }
+            H[l] = sum;
+        }
+
+        return H.OrderByDescending(x => x.Value).First().Key;
     }
 }
 
