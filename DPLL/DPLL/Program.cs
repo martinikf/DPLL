@@ -1,5 +1,7 @@
 ﻿using System.Text;
-ParserTest();
+
+HeuristicsTest();
+//ParserTest();
 //StructuresTests();
 
 
@@ -33,23 +35,57 @@ void StructuresTests()
     Console.WriteLine();
 
     SatDpllSolver satDpllSolver = new();
-    Console.WriteLine("Formula: " + f2 + " IsSatisfiable backtracking: " + satDpllSolver.IsSatisfiable(f2));
+    Console.WriteLine("Formula: " + f2 + " IsSatisfiable backtracking: " + satDpllSolver.IsSatisfiable(f2, Heuristics.DLIS));
 
 }
 
 void ParserTest()
 {
     Formula f = new();
-    f.ParseFormulaFromFile(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example1.dimacs"));
+    f.ParseFormulaFromFile(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example3.dimacs"), true);
     SatDpllSolver solver = new();
-    Console.WriteLine("Is " + f + " satisfiable: " + solver.IsSatisfiable(f));
+    Console.WriteLine("Is " + f + " satisfiable: " + solver.IsSatisfiable(f, Heuristics.DLIS));
 
+}
+
+void HeuristicsTest()
+{
+    Formula f = new();
+    SatDpllSolver solver = new();
+    foreach (Heuristics h in Heuristics.GetValues(typeof(Heuristics)))
+    {
+        Console.WriteLine("----------------------------------------------------");
+
+        f.ParseFormulaFromFile(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example3.dimacs"), false);
+        Console.WriteLine("Heuristic: " + h.ToString());
+        Console.WriteLine("Is satisfiable: " + solver.IsSatisfiable(f, h));
+        Console.WriteLine("Recursive calls: " + solver.RecursiveCalls);
+        solver.ResetRecursiveCalls();
+
+    }
+}
+
+public enum Heuristics
+{
+    RANDOM,
+    DLIS,
+    DLCS,
+    MOM,
+    BOHM
 }
 
 internal class SatDpllSolver
 {
-    public bool IsSatisfiable(Formula f)
+    public int RecursiveCalls { get; set; }
+
+    public SatDpllSolver()
     {
+        RecursiveCalls = 0;
+    }
+
+    public bool IsSatisfiable(Formula f, Heuristics h)
+    {
+        RecursiveCalls++;
         //End conditions
         if (f.IsEmpty()) return true;
         if (f.HasEmptyClause()) return false;
@@ -59,7 +95,7 @@ internal class SatDpllSolver
         if (x != null)
         {
             f.SetLiteral((int)x);
-            return IsSatisfiable(f);
+            return IsSatisfiable(f, h);
         }
 
         //Evaluates pure literals
@@ -67,22 +103,25 @@ internal class SatDpllSolver
         if (y != null)
         {
             f.SetLiteral((int)y);
-            return IsSatisfiable(f);
+            return IsSatisfiable(f, h);
         }
 
         //Choose literal to evaluate
-        var literal = ChooseLiteral(f);
-
-        //var literal = Dlis(f);
-        //var literal = Dlcs(f);
-        //var literal = MOM(f);
-        //var litelra = Bohm(f);
+        var literal = h switch
+        {
+            Heuristics.RANDOM => ChooseLiteral(f),
+            Heuristics.DLIS => Dlis(f),
+            Heuristics.DLCS => Dlcs(f),
+            Heuristics.MOM => MOM(f),
+            Heuristics.BOHM => Bohm(f),
+            _ => throw new Exception("Heuristic not implemented")
+        };
 
         //Evaluate literal to true
         var f1 = f.Clone();
         f1.SetLiteral(literal);
 
-        if (IsSatisfiable(f1))
+        if (IsSatisfiable(f1, h))
         {
             return true;
         }
@@ -91,7 +130,7 @@ internal class SatDpllSolver
         var f2 = f.Clone();
         f2.SetLiteral(-literal);
 
-        return IsSatisfiable(f2);
+        return IsSatisfiable(f2, h);
     }
 
     private int ChooseLiteral(Formula f)
@@ -113,6 +152,16 @@ internal class SatDpllSolver
     private int MOM(Formula f)
     {
         return f.MOM();
+    }
+
+    private int Bohm(Formula f)
+    {
+        return f.Bohm();
+    }
+
+    public void ResetRecursiveCalls()
+    {
+        RecursiveCalls = 0;
     }
 }
 
@@ -236,7 +285,7 @@ internal class Formula
         return sb.ToString();
     }
 
-    public void ParseFormulaFromFile(string path)
+    public void ParseFormulaFromFile(string path, bool print)
     {
         try
         {
@@ -246,18 +295,24 @@ internal class Formula
 
             while ((line = s.ReadLine()) != null)
             {
+                line = line.Trim();
                 if (line.Length <= 0)
                     break;
 
                 switch (line[0])
                 {
                     case 'p':
-                        var split = line.Split(" ");
-                        Console.WriteLine("Literals count: " + split[2]);
-                        Console.WriteLine("Formulas count: " + split[3]);
+                        if (print)
+                        {
+                            var split = line.Split(" ");
+                            Console.WriteLine("Literals count: " + split[2]);
+                            Console.WriteLine("Formulas count: " + split[3]);
+                        }
+
                         break;
                     case 'c':
-                        Console.WriteLine("Comment: " + line);
+                        if (print)
+                            Console.WriteLine("Comment: " + line);
                         break;
                     case '0':
                     case '1':
@@ -358,11 +413,6 @@ internal class Formula
         {
             if (c.Literals.Count < k.Literals.Count)
                 k = c;
-        }
-
-        if (k.Literals.Count < 2)
-        {
-            throw new Exception();
         }
 
         int literal = k.Literals.First();
