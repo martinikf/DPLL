@@ -4,7 +4,6 @@ HeuristicsTest();
 //ParserTest();
 //StructuresTests();
 
-
 void StructuresTests()
 {
     Clause c1 = new();
@@ -42,9 +41,9 @@ void StructuresTests()
 void ParserTest()
 {
     Formula f = new();
-    f.ParseFormulaFromFile(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example3.dimacs"), true);
+    f.ParseFormulaFromFile(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example2.dimacs"), true);
     SatDpllSolver solver = new();
-    Console.WriteLine("Is " + f + " satisfiable: " + solver.IsSatisfiable(f, Heuristics.DLIS));
+    Console.WriteLine("Is " + f + " satisfiable: " + solver.IsSatisfiable(f, Heuristics.MOM));
 
 }
 
@@ -56,12 +55,12 @@ void HeuristicsTest()
     {
         Console.WriteLine("----------------------------------------------------");
 
-        f.ParseFormulaFromFile(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example3.dimacs"), false);
+        f.ParseFormulaFromFile(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example2.dimacs"), false);
         Console.WriteLine("Heuristic: " + h.ToString());
+        Console.WriteLine("Formula: [" + f.InputLiterals + "; " + f.InputClauses + "]");
         Console.WriteLine("Is satisfiable: " + solver.IsSatisfiable(f, h));
         Console.WriteLine("Recursive calls: " + solver.RecursiveCalls);
         solver.ResetRecursiveCalls();
-
     }
 }
 
@@ -71,7 +70,8 @@ public enum Heuristics
     DLIS,
     DLCS,
     MOM,
-    BOHM
+    BOHM,
+    My
 }
 
 internal class SatDpllSolver
@@ -114,12 +114,13 @@ internal class SatDpllSolver
             Heuristics.DLCS => Dlcs(f),
             Heuristics.MOM => MOM(f),
             Heuristics.BOHM => Bohm(f),
+            Heuristics.My => My(f),
             _ => throw new Exception("Heuristic not implemented")
         };
 
         //Evaluate literal to true
         var f1 = f.Clone();
-        f1.SetLiteral(literal);
+        f1.SetLiteral(-literal);
 
         if (IsSatisfiable(f1, h))
         {
@@ -128,7 +129,7 @@ internal class SatDpllSolver
 
         //Evaluate literal to false
         var f2 = f.Clone();
-        f2.SetLiteral(-literal);
+        f2.SetLiteral(literal);
 
         return IsSatisfiable(f2, h);
     }
@@ -159,6 +160,11 @@ internal class SatDpllSolver
         return f.Bohm();
     }
 
+    private int My(Formula f)
+    {
+        return f.MaxFrequentLiteralInShortestClausules();
+    }
+
     public void ResetRecursiveCalls()
     {
         RecursiveCalls = 0;
@@ -176,6 +182,9 @@ internal class Formula
         get;
         set;
     }
+
+    public int InputLiterals = 0;
+    public int InputClauses = 0;
 
     private int FrequencyK(int literal, int k)
     {
@@ -218,7 +227,8 @@ internal class Formula
     public bool HasEmptyClause()
     {
         if (IsEmpty()) return false;
-        return Clauses.All(c => c.Literals.Count == 0);
+
+        return Clauses.Any(c => c.Literals.Count == 0);
     }
 
     public void SetLiteral(int literal)
@@ -302,9 +312,11 @@ internal class Formula
                 switch (line[0])
                 {
                     case 'p':
+                        var split = line.Split(" ");
+                        InputLiterals = int.Parse(split[2]);
+                        InputClauses = int.Parse(split[3]);
                         if (print)
                         {
-                            var split = line.Split(" ");
                             Console.WriteLine("Literals count: " + split[2]);
                             Console.WriteLine("Formulas count: " + split[3]);
                         }
@@ -385,6 +397,33 @@ internal class Formula
         }
 
         return maxKey;
+    }
+
+    //MY find longest clause, foreach longest clause find most frequent literal
+    public int MaxFrequentLiteralInShortestClausules()
+    {
+        //Find shortest clausule
+        Clause k = Clauses.First();
+
+        foreach (var c in Clauses)
+        {
+            if (c.Literals.Count < k.Literals.Count)
+                k = c;
+        }
+        Dictionary<int, int> freq = new();
+        foreach (var l in Literals)
+        {
+            freq[l] = 0;
+            foreach (var c in Clauses.Where(x => x.Literals.Count == k.Literals.Count))
+            {
+                if (c.Literals.Contains(l))
+                {
+                    freq[l]++;
+                }
+            }
+        }
+
+        return freq.OrderByDescending(x => x.Value).First().Key;
     }
 
     //DLCS
