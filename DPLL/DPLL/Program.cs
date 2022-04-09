@@ -1,7 +1,7 @@
 ﻿using System.Text;
 
-HeuristicsTest();
-//ParserTest();
+//HeuristicsTest();
+ParserTest();
 //StructuresTests();
 
 void StructuresTests()
@@ -30,7 +30,7 @@ void StructuresTests()
     Console.WriteLine("Formula: " + f1 + " HasEmptyClause()? " + f1.HasEmptyClause);
 
     Console.WriteLine("Formula: " + f2 + " literals: ");
-    foreach (var f2Literal in f2.Literals)
+    foreach (var f2Literal in f2.AllLiterals)
     {
         Console.Write(f2Literal + ", ");
     }
@@ -47,7 +47,7 @@ void ParserTest()
     Formula f = new();
     f.ParseFormulaFromFile(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example3.dimacs"), true);
     SatDpllSolver solver = new();
-    Console.WriteLine("Is " + f + " satisfiable: " + solver.IsSatisfiable(f, Heuristics.BOHM));
+    Console.WriteLine("Is " + f + " satisfiable: " + solver.IsSatisfiable(f, Heuristics.DLCS));
     Console.WriteLine(solver.RecursiveCalls);
 }
 
@@ -149,93 +149,109 @@ internal class SatDpllSolver
 
 internal class Formula
 {
-    public HashSet<Clause> Clauses { get; set; }
+    public Dictionary<int, int> AllLiterals { get; set; }
 
-    public Dictionary<int, int> Frequency { get; set; }
-
-    public HashSet<int> Literals { get; set; }
+    public Dictionary<int, HashSet<Clause>> CountClauses { get; set; }
 
     public int InputLiterals = 0;
     public int InputClauses = 0;
     public bool HasEmptyClause = false;
+    public int ClauseCount = 0;
 
     public Formula()
     {
-        Clauses = new HashSet<Clause>();
-        Literals = new HashSet<int>();
-        Frequency = new Dictionary<int, int>();
-        Recalculate();
+        AllLiterals = new Dictionary<int, int>();
+        CountClauses = new Dictionary<int, HashSet<Clause>>();
     }
 
     public Formula(IEnumerable<Clause> clauses)
     {
-        Clauses = new HashSet<Clause>();
-        Literals = new HashSet<int>();
-        Frequency = new Dictionary<int, int>();
+        AllLiterals = new Dictionary<int, int>();
+        CountClauses = new Dictionary<int, HashSet<Clause>>();
 
         foreach (var c in clauses)
-            Clauses.Add(c);
-        Recalculate();
+        {
+            if (CountClauses.ContainsKey(c.Literals.Count))
+                CountClauses[c.Literals.Count].Add(c);
+            else
+            {
+                CountClauses[c.Literals.Count] = new() { c };
+            }
+            ClauseCount++;
+        }
+
+        foreach (var c in AllClauses())
+        {
+            foreach (var l in c.Literals)
+            {
+                if (AllLiterals.ContainsKey(l))
+                    AllLiterals[l]++;
+                else
+                    AllLiterals[l] = 1;
+            }
+        }
+    }
+
+    public HashSet<int> UniqueLiterals()
+    {
+        return AllLiterals.Keys.ToHashSet();
+    }
+
+    public HashSet<Clause> AllClauses()
+    {
+        return CountClauses.Values.SelectMany(x => x).ToHashSet();
     }
 
     public bool IsEmpty()
     {
-        return Clauses.Count == 0;
+        return ClauseCount == 0;
     }
 
     public void SetLiteral(int literal)
     {
-        if (!Literals.Contains(literal))
+        if (AllLiterals[literal] <= 0)
+        {
+            Console.WriteLine("Warning! Setting literal that doesn't exists");
             return;
+        }
 
-        foreach (var c in Clauses.Where(x => x.Literals.Contains(literal) || x.Literals.Contains(-literal)).ToList())
+        foreach (var c in AllClauses().Where(x => x.Literals.Contains(literal) || x.Literals.Contains(-literal)).ToList())
         {
             if (c.Literals.Contains(literal))
             {
-                Clauses.Remove(c);
+                CountClauses[c.Literals.Count].Remove(c);
+                ClauseCount--;
+                foreach (var lit in c.Literals)
+                {
+                    AllLiterals[lit]--;
+                }
             }
             else
             {
+                CountClauses[c.Literals.Count].Remove(c);
+
                 c.Literals.Remove(-literal);
+                AllLiterals[-literal]--;
+
                 if (c.Literals.Count == 0)
                     HasEmptyClause = true;
+
+                if (CountClauses.ContainsKey(c.Literals.Count))
+                    CountClauses[c.Literals.Count].Add(c);
+                else
+                    CountClauses[c.Literals.Count] = new() { c };
             }
         }
-        Recalculate();
     }
 
     public Formula Clone()
     {
-        return new Formula(Clauses.Select(c => c.Clone()).ToList());
-    }
-
-    public void Recalculate()
-    {
-        Literals.Clear();
-        foreach (var c in Clauses)
-        {
-            foreach (var l in c.Literals)
-            {
-                Literals.Add(l);
-            }
-        }
-
-        foreach (var l in Literals)
-        {
-            Frequency[l] = 0;
-            foreach (var c in Clauses)
-            {
-                if (c.Literals.Contains(l))
-                {
-                    Frequency[l]++;
-                }
-            }
-        }
+        return new Formula(AllClauses().Select(c => c.Clone()).ToList());
     }
 
     private int FrequencyK(int literal, int k)
     {
-        return Clauses.Where(x => x.Literals.Count == k).Count(c => c.Literals.Contains(literal));
+        return CountClauses[k].Count(c => c.Literals.Contains(literal));
     }
 
     public override string ToString()
@@ -245,7 +261,7 @@ internal class Formula
 
         sb.Append('(');
 
-        foreach (var c in Clauses)
+        foreach (var c in AllClauses())
         {
             if (empty)
                 empty = false;
@@ -302,27 +318,42 @@ internal class Formula
                     case '8':
                     case '9':
                     case '-':
-                        Clause c = new();
+                        Clause newClause = new();
                         foreach (var num in line.Split(" "))
                         {
-                            if (num != "0")
-                                c.Literals.Add(int.Parse(num));
+                            var number = int.Parse(num);
+
+                            if (number == 0) continue;
+
+                            if (newClause.Literals.Contains(number)) continue;
+
+                            newClause.Literals.Add(number);
+
+                            if (AllLiterals.ContainsKey(number))
+                                AllLiterals[number]++;
+                            else
+                                AllLiterals[number] = 1;
+                        }
+                        if (CountClauses.ContainsKey(newClause.Literals.Count))
+                            CountClauses[newClause.Literals.Count].Add(newClause);
+                        else
+                        {
+                            CountClauses[newClause.Literals.Count] = new HashSet<Clause>();
+                            CountClauses[newClause.Literals.Count].Add(newClause);
                         }
 
-                        Clauses.Add(c);
+                        ClauseCount++;
                         break;
                     default:
                         Console.WriteLine(line);
                         break;
                 }
             }
-
-            Recalculate();
         }
         catch (Exception ex)
         {
-            Literals.Clear();
-            Clauses.Clear();
+            AllLiterals.Clear();
+            CountClauses.Clear();
             Console.WriteLine("Error while parsing file");
             Console.WriteLine(ex.ToString());
         }
@@ -330,78 +361,98 @@ internal class Formula
 
     public int? GetFirstPureLiteral()
     {
-        int a = Literals.FirstOrDefault(x => !Literals.Contains(-x));
-        if (a == 0)
-            return null;
-        return a;
-
-    }
-
-    public int? GetFirstSingletonClauseLiteral()
-    {
-        //O(n)
-        foreach (var c in Clauses)
+        foreach (var l in AllLiterals.Keys)
         {
-            if (c.Literals.Count == 1)
-                return c.Literals.Min();
+            if (AllLiterals[l] > 0 && AllLiterals[-l] == 0)
+                return l;
         }
 
         return null;
     }
 
+    public int? GetFirstSingletonClauseLiteral()
+    {
+        int? res = 0;
+        if (CountClauses.ContainsKey(1))
+        {
+            res = CountClauses[1].FirstOrDefault()?.Literals.First();
+        }
+
+        return res == 0 ? null : res;
+    }
+
     //DLIS
     public int Dlis()
     {
-        var maxKey = Literals.First();
+        var maxKey = AllLiterals.Keys.First();
 
-        foreach (var l in Literals)
+        foreach (var l in AllLiterals.Keys)
         {
-            if (Frequency[l] > Frequency[maxKey])
+            if (AllLiterals[l] > AllLiterals[maxKey])
                 maxKey = l;
         }
 
-        return -maxKey; // Opak protože v dppl je to naopak
-
+        Console.WriteLine(maxKey);
+        return maxKey; // TODO minus
     }
 
     //DLCS
     public int Dlcs()
     {
-        var maxKey = Literals.First();
+        var maxKey = AllLiterals.Keys.First();
 
-        foreach (var l in Literals)
+        foreach (var l in AllLiterals.Keys)
         {
-            if (Frequency[l] + Frequency[-l] > Frequency[maxKey] + Frequency[-maxKey])
+            if (AllLiterals[l] + AllLiterals[-l] > AllLiterals[maxKey] + AllLiterals[-maxKey])
                 maxKey = l;
         }
 
-        if (Frequency[maxKey] >= Frequency[-maxKey])
-            return -maxKey; // Opak protože v dppl je to naopak
+        if (AllLiterals[maxKey] >= AllLiterals[-maxKey])
+            return -maxKey; // TODO minus
         return maxKey;
     }
 
     //MOM
     public int MOM()
     {
-        var p = Literals.Count * Literals.Count + 1;
-        var k = Clauses.First();
+        var p = AllLiterals.Keys.Count * AllLiterals.Keys.Count + 1;
 
-        foreach (var c in Clauses)
+        var shortestClauses = CountClauses[GetShortestClause()]; //Collection of shortest clauses
+        var literals = shortestClauses.SelectMany(x => x.Literals).ToHashSet(); //Unique literals in shortest clauses
+
+        int maxLiteral = literals.First(); //Current best literal
+        int maxLiteralValue = 0;
+
+        var l1 = 0;
+        var l2 = 0;
+        foreach (var l in literals)
         {
-            if (c.Literals.Count < k.Literals.Count)
-                k = c;
+            foreach (var c in shortestClauses)
+            {
+                if (c.Literals.Contains(l))
+                    l1++;
+                else if (c.Literals.Contains(-l))
+                    l2++;
+            }
+
+            if ((l1 + l2) * p + l1 * l2 > maxLiteralValue)
+                maxLiteral = l;
         }
 
-        var literal = k.Literals.First();
-        foreach (var l in Literals)
+        return maxLiteral;
+    }
+
+    private int GetShortestClause()
+    {
+        var shortest = CountClauses.Keys.First();
+
+        foreach (var c in CountClauses.Keys)
         {
-            if ((FrequencyK(l, k.Literals.Count) + FrequencyK(-l, k.Literals.Count)) * p + (FrequencyK(l, k.Literals.Count) * (FrequencyK(-l, k.Literals.Count)))
-                >
-                (FrequencyK(literal, k.Literals.Count) + FrequencyK(-literal, k.Literals.Count)) * p + (FrequencyK(literal, k.Literals.Count) * (FrequencyK(-literal, k.Literals.Count))))
-                literal = l;
+            if (CountClauses[c].Count > 0 && c < shortest)
+                shortest = c;
         }
 
-        return literal;
+        return shortest;
     }
 
     //Bohm
@@ -410,62 +461,87 @@ internal class Formula
         const int p1 = 1;
         const int p2 = 2;
 
-        //Find longest clause
-        var n = Clauses.First().Literals.Count;
-        foreach (var c in Clauses)
-        {
-            if (c.Literals.Count > n)
-                n = c.Literals.Count;
-        }
+        int maxLiteral = 0;
+        int maxLiteralValue = 0;
 
-        Dictionary<int, int> H = new();
-
-        foreach (var l in Literals)
+        foreach (var l in AllLiterals.Keys)
         {
             var sum = 0;
 
-            for (var i = 2; i <= n; i++)
+            //For all clauses len
+            for (var i = 2; i <= CountClauses.Keys.Max(); i++)
             {
-                //Prochazim klasule nejdelší délky?
-                sum += p1 * Math.Max(FrequencyK(l, i), FrequencyK(-l, i)) +
-                       p2 * Math.Min(FrequencyK(l, i), FrequencyK(-l, i));
-            }
-            H[l] = sum;
-        }
+                if (CountClauses[i].Count <= 0) continue;
+                //Spočítám frekvence literálu v kaluzulích délky i
+                var l1 = 0;
+                var l2 = 0;
+                foreach (var c in CountClauses[i])
+                {
+                    if (c.Literals.Contains(l))
+                        l1++;
+                    else if (c.Literals.Contains(-l))
+                        l2++;
+                }
 
-        return H.OrderByDescending(x => x.Value).First().Key;
+                sum += p1 * Math.Max(l1, l2) + p2 * Math.Min(l1, l2);
+            }
+            if (sum > maxLiteralValue)
+            {
+                maxLiteral = l;
+                maxLiteralValue = sum;
+            }
+        }
+        if (maxLiteral == 0)
+            throw new Exception("Bohm: maxLiteral == 0");
+        return maxLiteral;
     }
 
     //MY find longest clause, foreach longest clause find most frequent literal
     public int My()
     {
-        //Find shortest clausule
-        Clause k = Clauses.First();
+        int maxLiteral = 0;
+        int maxLiteralValue = 0;
 
-        foreach (var c in Clauses)
+        var longestClauses = CountClauses[GetLongestClause()]; //Collection of longest clauses
+        var literals = longestClauses.SelectMany(x => x.Literals).ToHashSet();
+
+        foreach (var l in literals)
         {
-            if (c.Literals.Count < k.Literals.Count)
-                k = c;
-        }
-        Dictionary<int, int> freq = new();
-        foreach (var l in Literals)
-        {
-            freq[l] = 0;
-            foreach (var c in Clauses.Where(x => x.Literals.Count == k.Literals.Count))
+            var count = 0;
+            foreach (var c in longestClauses)
             {
                 if (c.Literals.Contains(l))
-                {
-                    freq[l]++;
-                }
+                    count++;
+            }
+
+            if (count > maxLiteralValue)
+            {
+                maxLiteral = l;
+                maxLiteralValue = count;
             }
         }
 
-        return freq.OrderByDescending(x => x.Value).First().Key;
+        if (maxLiteral == 0)
+            throw new Exception("My: maxLiteral == 0");
+        return maxLiteral;
+    }
+
+    private int GetLongestClause()
+    {
+        var longest = 0;
+
+        foreach (var c in CountClauses.Keys)
+        {
+            if (CountClauses[c].Count > 0 && c > longest)
+                longest = c;
+        }
+
+        return longest;
     }
 
     public int RandomLiteral()
     {
-        return Literals.ElementAt(Random.Shared.Next(Literals.Count));
+        return AllLiterals.ElementAt(Random.Shared.Next(AllLiterals.Count)).Key;
     }
 }
 
