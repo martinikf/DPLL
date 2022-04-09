@@ -21,16 +21,19 @@ void StructuresTests()
     Console.WriteLine(f1.ToString());
 
     Console.WriteLine("Formula: " + f1 + " IsEmpty()? " + f1.IsEmpty());
-    Console.WriteLine("Formula: " + f1 + " HasEmptyClause()? " + f1.HasEmptyClause());
+    Console.WriteLine("Formula: " + f1 + " HasEmptyClause()? " + f1.HasEmptyClause);
 
     Console.WriteLine("Set literal 5 to true for formula: " + f1);
     f1.SetLiteral(5);
     Console.WriteLine("Formula after evaluating literal 5 to true: " + f1);
     Console.WriteLine("Formula: " + f1 + " IsEmpty()? " + f1.IsEmpty());
-    Console.WriteLine("Formula: " + f1 + " HasEmptyClause()? " + f1.HasEmptyClause());
+    Console.WriteLine("Formula: " + f1 + " HasEmptyClause()? " + f1.HasEmptyClause);
 
     Console.WriteLine("Formula: " + f2 + " literals: ");
-    f2.Literals.ForEach(l => Console.Write(l + ", "));
+    foreach (var f2Literal in f2.Literals)
+    {
+        Console.Write(f2Literal + ", ");
+    }
     Console.WriteLine();
 
     SatDpllSolver satDpllSolver = new();
@@ -38,21 +41,26 @@ void StructuresTests()
 
 }
 
+
 void ParserTest()
 {
     Formula f = new();
-    f.ParseFormulaFromFile(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example2.dimacs"), true);
+    f.ParseFormulaFromFile(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example3.dimacs"), true);
     SatDpllSolver solver = new();
-    Console.WriteLine("Is " + f + " satisfiable: " + solver.IsSatisfiable(f, Heuristics.MOM));
-
+    Console.WriteLine("Is " + f + " satisfiable: " + solver.IsSatisfiable(f, Heuristics.BOHM));
+    Console.WriteLine(solver.RecursiveCalls);
 }
+
 
 void HeuristicsTest()
 {
-    Formula f = new();
-    SatDpllSolver solver = new();
-    foreach (Heuristics h in Heuristics.GetValues(typeof(Heuristics)))
+    foreach (Heuristics h in Enum.GetValues(typeof(Heuristics)))
     {
+        Formula f = new();
+        SatDpllSolver solver = new();
+
+        if (h == Heuristics.RANDOM) continue;
+
         Console.WriteLine("----------------------------------------------------");
 
         f.ParseFormulaFromFile(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example2.dimacs"), false);
@@ -88,7 +96,7 @@ internal class SatDpllSolver
         RecursiveCalls++;
         //End conditions
         if (f.IsEmpty()) return true;
-        if (f.HasEmptyClause()) return false;
+        if (f.HasEmptyClause) return false;
 
         //Evaluates literals from clauses that contains only one literal
         var x = f.GetFirstSingletonClauseLiteral();
@@ -109,16 +117,16 @@ internal class SatDpllSolver
         //Choose literal to evaluate
         var literal = h switch
         {
-            Heuristics.RANDOM => ChooseLiteral(f),
-            Heuristics.DLIS => Dlis(f),
-            Heuristics.DLCS => Dlcs(f),
-            Heuristics.MOM => MOM(f),
-            Heuristics.BOHM => Bohm(f),
-            Heuristics.My => My(f),
+            Heuristics.RANDOM => f.RandomLiteral(),
+            Heuristics.DLIS => f.Dlis(),
+            Heuristics.DLCS => f.Dlcs(),
+            Heuristics.MOM => f.MOM(),
+            Heuristics.BOHM => f.Bohm(),
+            Heuristics.My => f.My(),
             _ => throw new Exception("Heuristic not implemented")
         };
 
-        //Evaluate literal to true
+        //Evaluate literal
         var f1 = f.Clone();
         f1.SetLiteral(-literal);
 
@@ -128,41 +136,9 @@ internal class SatDpllSolver
         }
 
         //Evaluate literal to false
-        var f2 = f.Clone();
-        f2.SetLiteral(literal);
+        f.SetLiteral(literal);
 
-        return IsSatisfiable(f2, h);
-    }
-
-    private int ChooseLiteral(Formula f)
-    {
-        //Random literal
-        return f.Literals[Random.Shared.Next(f.Literals.Count)];
-    }
-
-    private int Dlis(Formula f)
-    {
-        return f.MaxFrequentLiteral();
-    }
-
-    private int Dlcs(Formula f)
-    {
-        return f.MaxFrequentLiteralWithNegation();
-    }
-
-    private int MOM(Formula f)
-    {
-        return f.MOM();
-    }
-
-    private int Bohm(Formula f)
-    {
-        return f.Bohm();
-    }
-
-    private int My(Formula f)
-    {
-        return f.MaxFrequentLiteralInShortestClausules();
+        return IsSatisfiable(f, h);
     }
 
     public void ResetRecursiveCalls()
@@ -173,49 +149,32 @@ internal class SatDpllSolver
 
 internal class Formula
 {
-    public List<Clause> Clauses { get; set; }
+    public HashSet<Clause> Clauses { get; set; }
 
     public Dictionary<int, int> Frequency { get; set; }
 
-    public List<int> Literals
-    {
-        get;
-        set;
-    }
+    public HashSet<int> Literals { get; set; }
 
     public int InputLiterals = 0;
     public int InputClauses = 0;
-
-    private int FrequencyK(int literal, int k)
-    {
-        int count = 0;
-
-        foreach (var c in Clauses.Where(x => x.Literals.Count == k))
-        {
-            if (c.Literals.Contains(literal))
-            {
-                count++;
-            }
-        }
-
-        return count;
-    }
-
-    public Formula(IEnumerable<Clause> c)
-    {
-        Clauses = new List<Clause>();
-        Literals = new List<int>();
-        Frequency = new Dictionary<int, int>();
-
-        Clauses.AddRange(c);
-        Recalculate();
-    }
+    public bool HasEmptyClause = false;
 
     public Formula()
     {
-        Clauses = new List<Clause>();
-        Literals = new List<int>();
+        Clauses = new HashSet<Clause>();
+        Literals = new HashSet<int>();
         Frequency = new Dictionary<int, int>();
+        Recalculate();
+    }
+
+    public Formula(IEnumerable<Clause> clauses)
+    {
+        Clauses = new HashSet<Clause>();
+        Literals = new HashSet<int>();
+        Frequency = new Dictionary<int, int>();
+
+        foreach (var c in clauses)
+            Clauses.Add(c);
         Recalculate();
     }
 
@@ -224,30 +183,24 @@ internal class Formula
         return Clauses.Count == 0;
     }
 
-    public bool HasEmptyClause()
-    {
-        if (IsEmpty()) return false;
-
-        return Clauses.Any(c => c.Literals.Count == 0);
-    }
-
     public void SetLiteral(int literal)
     {
         if (!Literals.Contains(literal))
             return;
 
-        foreach (var c in Clauses.ToList())
+        foreach (var c in Clauses.Where(x => x.Literals.Contains(literal) || x.Literals.Contains(-literal)).ToList())
         {
             if (c.Literals.Contains(literal))
             {
                 Clauses.Remove(c);
             }
-            else if (c.Literals.Contains(-literal))
+            else
             {
                 c.Literals.Remove(-literal);
+                if (c.Literals.Count == 0)
+                    HasEmptyClause = true;
             }
         }
-
         Recalculate();
     }
 
@@ -258,19 +211,31 @@ internal class Formula
 
     public void Recalculate()
     {
-        var literals = new List<int>();
-        foreach (var clause in Clauses)
-        {
-            literals.AddRange(clause.Literals);
-        }
-
         Literals.Clear();
-        Literals.AddRange(literals.Distinct().ToList());
+        foreach (var c in Clauses)
+        {
+            foreach (var l in c.Literals)
+            {
+                Literals.Add(l);
+            }
+        }
 
         foreach (var l in Literals)
         {
-            Frequency[l] = Clauses.Count(x => x.Literals.Contains(l));
+            Frequency[l] = 0;
+            foreach (var c in Clauses)
+            {
+                if (c.Literals.Contains(l))
+                {
+                    Frequency[l]++;
+                }
+            }
         }
+    }
+
+    private int FrequencyK(int literal, int k)
+    {
+        return Clauses.Where(x => x.Literals.Count == k).Count(c => c.Literals.Contains(literal));
     }
 
     public override string ToString()
@@ -365,13 +330,11 @@ internal class Formula
 
     public int? GetFirstPureLiteral()
     {
-        foreach (var l in Literals)
-        {
-            if (!Literals.Contains(-l))
-                return l;
-        }
+        int a = Literals.FirstOrDefault(x => !Literals.Contains(-x));
+        if (a == 0)
+            return null;
+        return a;
 
-        return null;
     }
 
     public int? GetFirstSingletonClauseLiteral()
@@ -387,20 +350,94 @@ internal class Formula
     }
 
     //DLIS
-    public int MaxFrequentLiteral()
+    public int Dlis()
     {
-        int maxKey = Literals[0];
+        var maxKey = Literals.First();
+
         foreach (var l in Literals)
         {
             if (Frequency[l] > Frequency[maxKey])
                 maxKey = l;
         }
 
+        return -maxKey; // Opak protože v dppl je to naopak
+
+    }
+
+    //DLCS
+    public int Dlcs()
+    {
+        var maxKey = Literals.First();
+
+        foreach (var l in Literals)
+        {
+            if (Frequency[l] + Frequency[-l] > Frequency[maxKey] + Frequency[-maxKey])
+                maxKey = l;
+        }
+
+        if (Frequency[maxKey] >= Frequency[-maxKey])
+            return -maxKey; // Opak protože v dppl je to naopak
         return maxKey;
     }
 
+    //MOM
+    public int MOM()
+    {
+        var p = Literals.Count * Literals.Count + 1;
+        var k = Clauses.First();
+
+        foreach (var c in Clauses)
+        {
+            if (c.Literals.Count < k.Literals.Count)
+                k = c;
+        }
+
+        var literal = k.Literals.First();
+        foreach (var l in Literals)
+        {
+            if ((FrequencyK(l, k.Literals.Count) + FrequencyK(-l, k.Literals.Count)) * p + (FrequencyK(l, k.Literals.Count) * (FrequencyK(-l, k.Literals.Count)))
+                >
+                (FrequencyK(literal, k.Literals.Count) + FrequencyK(-literal, k.Literals.Count)) * p + (FrequencyK(literal, k.Literals.Count) * (FrequencyK(-literal, k.Literals.Count))))
+                literal = l;
+        }
+
+        return literal;
+    }
+
+    //Bohm
+    public int Bohm()
+    {
+        const int p1 = 1;
+        const int p2 = 2;
+
+        //Find longest clause
+        var n = Clauses.First().Literals.Count;
+        foreach (var c in Clauses)
+        {
+            if (c.Literals.Count > n)
+                n = c.Literals.Count;
+        }
+
+        Dictionary<int, int> H = new();
+
+        foreach (var l in Literals)
+        {
+            var sum = 0;
+
+            for (var i = 2; i <= n; i++)
+            {
+                //Prochazim klasule nejdelší délky?
+                sum += p1 * Math.Max(FrequencyK(l, i), FrequencyK(-l, i)) +
+                       p2 * Math.Min(FrequencyK(l, i), FrequencyK(-l, i));
+            }
+            H[l] = sum;
+        }
+
+        return H.OrderByDescending(x => x.Value).First().Key;
+    }
+
     //MY find longest clause, foreach longest clause find most frequent literal
-    public int MaxFrequentLiteralInShortestClausules()
+    public int My()
     {
         //Find shortest clausule
         Clause k = Clauses.First();
@@ -426,75 +463,9 @@ internal class Formula
         return freq.OrderByDescending(x => x.Value).First().Key;
     }
 
-    //DLCS
-    public int MaxFrequentLiteralWithNegation()
+    public int RandomLiteral()
     {
-        var maxKey = Literals[0];
-
-        foreach (var l in Literals)
-        {
-            if (Frequency[l] + Frequency[-l] > Frequency[maxKey] + Frequency[-maxKey])
-                maxKey = l;
-        }
-
-        if (Frequency[-maxKey] > Frequency[maxKey])
-            return -maxKey;
-        return maxKey;
-    }
-
-    //MOM
-    public int MOM()
-    {
-        int p = Literals.Count * Literals.Count + 1;
-        Clause k = Clauses.First();
-
-        foreach (var c in Clauses)
-        {
-            if (c.Literals.Count < k.Literals.Count)
-                k = c;
-        }
-
-        int literal = k.Literals.First();
-        foreach (var l in Literals)
-        {
-            if ((FrequencyK(l, k.Literals.Count) + FrequencyK(-l, k.Literals.Count)) * p + Frequency[l] * Frequency[-l]
-                >
-                (FrequencyK(literal, k.Literals.Count) + FrequencyK(-literal, k.Literals.Count)) * p + Frequency[literal] * Frequency[-literal])
-                literal = l;
-        }
-
-        return literal;
-    }
-
-    //Bohm
-    public int Bohm()
-    {
-        var p1 = 1;
-        var p2 = 2;
-
-        //Find longest clause
-        int n = Clauses.First().Literals.Count;
-        foreach (var c in Clauses)
-        {
-            if (c.Literals.Count > n)
-                n = c.Literals.Count;
-        }
-
-        Dictionary<int, int> H = new();
-
-        foreach (var l in Literals)
-        {
-            var sum = 0;
-
-            for (int i = 2; i < n; i++)
-            {
-                sum += p1 * Math.Max(FrequencyK(l, i), FrequencyK(-l, i)) +
-                       p2 * Math.Min(FrequencyK(l, i), FrequencyK(-l, i));
-            }
-            H[l] = sum;
-        }
-
-        return H.OrderByDescending(x => x.Value).First().Key;
+        return Literals.ElementAt(Random.Shared.Next(Literals.Count));
     }
 }
 

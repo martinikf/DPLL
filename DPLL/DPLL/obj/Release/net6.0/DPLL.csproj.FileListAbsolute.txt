@@ -1,0 +1,15 @@
+C:\Users\marti\Documents\GitHub\DPLL\DPLL\DPLL\bin\Release\net6.0\DPLL.exe
+C:\Users\marti\Documents\GitHub\DPLL\DPLL\DPLL\bin\Release\net6.0\DPLL.deps.json
+C:\Users\marti\Documents\GitHub\DPLL\DPLL\DPLL\bin\Release\net6.0\DPLL.runtimeconfig.json
+C:\Users\marti\Documents\GitHub\DPLL\DPLL\DPLL\bin\Release\net6.0\DPLL.dll
+C:\Users\marti\Documents\GitHub\DPLL\DPLL\DPLL\bin\Release\net6.0\DPLL.pdb
+C:\Users\marti\Documents\GitHub\DPLL\DPLL\DPLL\obj\Release\net6.0\DPLL.csproj.AssemblyReference.cache
+C:\Users\marti\Documents\GitHub\DPLL\DPLL\DPLL\obj\Release\net6.0\DPLL.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\marti\Documents\GitHub\DPLL\DPLL\DPLL\obj\Release\net6.0\DPLL.AssemblyInfoInputs.cache
+C:\Users\marti\Documents\GitHub\DPLL\DPLL\DPLL\obj\Release\net6.0\DPLL.AssemblyInfo.cs
+C:\Users\marti\Documents\GitHub\DPLL\DPLL\DPLL\obj\Release\net6.0\DPLL.csproj.CoreCompileInputs.cache
+C:\Users\marti\Documents\GitHub\DPLL\DPLL\DPLL\obj\Release\net6.0\DPLL.dll
+C:\Users\marti\Documents\GitHub\DPLL\DPLL\DPLL\obj\Release\net6.0\refint\DPLL.dll
+C:\Users\marti\Documents\GitHub\DPLL\DPLL\DPLL\obj\Release\net6.0\DPLL.pdb
+C:\Users\marti\Documents\GitHub\DPLL\DPLL\DPLL\obj\Release\net6.0\DPLL.genruntimeconfig.cache
+C:\Users\marti\Documents\GitHub\DPLL\DPLL\DPLL\obj\Release\net6.0\ref\DPLL.dll
