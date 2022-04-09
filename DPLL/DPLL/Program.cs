@@ -1,7 +1,7 @@
 ﻿using System.Text;
 
-//HeuristicsTest();
-ParserTest();
+HeuristicsTest();
+//ParserTest();
 //StructuresTests();
 
 void StructuresTests()
@@ -45,7 +45,7 @@ void StructuresTests()
 void ParserTest()
 {
     Formula f = new();
-    f.ParseFormulaFromFile(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example3.dimacs"), true);
+    f.ParseFormulaFromFile(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example4.dimacs"), true);
     SatDpllSolver solver = new();
     Console.WriteLine("Is " + f + " satisfiable: " + solver.IsSatisfiable(f, Heuristics.DLCS));
     Console.WriteLine(solver.RecursiveCalls);
@@ -287,6 +287,7 @@ internal class Formula
             while ((line = s.ReadLine()) != null)
             {
                 line = line.Trim();
+                line = line.Replace('\t', ' ');
                 if (line.Length <= 0)
                     break;
 
@@ -361,8 +362,10 @@ internal class Formula
 
     public int? GetFirstPureLiteral()
     {
-        foreach (var l in AllLiterals.Keys)
+        foreach (var l in AllLiterals.Keys.ToList())
         {
+            if (!AllLiterals.ContainsKey(-l)) AllLiterals[-l] = 0;
+
             if (AllLiterals[l] > 0 && AllLiterals[-l] == 0)
                 return l;
         }
@@ -392,7 +395,6 @@ internal class Formula
                 maxKey = l;
         }
 
-        Console.WriteLine(maxKey);
         return maxKey; // TODO minus
     }
 
@@ -420,13 +422,16 @@ internal class Formula
         var shortestClauses = CountClauses[GetShortestClause()]; //Collection of shortest clauses
         var literals = shortestClauses.SelectMany(x => x.Literals).ToHashSet(); //Unique literals in shortest clauses
 
-        int maxLiteral = literals.First(); //Current best literal
+        int maxLiteral = 0;
         int maxLiteralValue = 0;
 
-        var l1 = 0;
-        var l2 = 0;
+
+
         foreach (var l in literals)
         {
+            var l1 = 0;
+            var l2 = 0;
+
             foreach (var c in shortestClauses)
             {
                 if (c.Literals.Contains(l))
@@ -435,8 +440,12 @@ internal class Formula
                     l2++;
             }
 
-            if ((l1 + l2) * p + l1 * l2 > maxLiteralValue)
+            var num = (l1 + l2) * p + l1 * l2;
+            if (num > maxLiteralValue)
+            {
+                maxLiteralValue = num;
                 maxLiteral = l;
+            }
         }
 
         return maxLiteral;
