@@ -1,125 +1,38 @@
-﻿//TODO literals in order from original formula
-using System.Diagnostics;
+﻿//TODO multi-threading
 using System.Text;
+HeuristicsTest(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example2.dimacs"));
 
-//AsyncTest();
-HeuristicsTest();
-//ParserTest();
-//StructuresTests();
-
-void StructuresTests()
+while (true)
 {
-    Clause c1 = new();
-    c1.Literals.Add(-1);
-    c1.Literals.Add(1);
-
-    Clause c2 = new();
-    c2.Literals.Add(1);
-
-    Console.WriteLine(c1.ToString());
-
-    Formula f1 = new(new List<Clause>() { c1, c2 });
-    Formula f2 = f1.Clone();
-
-    Console.WriteLine(f1.ToString());
-
-    Console.WriteLine("Formula: " + f1 + " IsEmpty()? " + f1.IsEmpty());
-    Console.WriteLine("Formula: " + f1 + " HasEmptyClause()? " + f1.HasEmptyClause);
-
-    Console.WriteLine("Set literal 5 to true for formula: " + f1);
-    f1.SetLiteral(5);
-    Console.WriteLine("Formula after evaluating literal 5 to true: " + f1);
-    Console.WriteLine("Formula: " + f1 + " IsEmpty()? " + f1.IsEmpty());
-    Console.WriteLine("Formula: " + f1 + " HasEmptyClause()? " + f1.HasEmptyClause);
-
-    Console.WriteLine("Formula: " + f2 + " literals: ");
-    foreach (var f2Literal in f2.AllLiterals)
-    {
-        Console.Write(f2Literal + ", ");
-    }
-    Console.WriteLine();
-
-    SatDpllSolver satDpllSolver = new();
-    Console.WriteLine("Formula: " + f2 + " IsSatisfiable backtracking: " + satDpllSolver.IsSatisfiable(f2, Heuristics.DLIS));
-
+    Console.WriteLine("Input dimacs file path: ");
+    var path = Console.ReadLine();
+    if (path != null)
+        HeuristicsTest(path);
 }
 
-void AsyncTest()
-{
-    Formula F = new Formula();
-    F.ParseFormulaFromFile(Path.Combine(Environment.CurrentDirectory, @"CNF", "Example3.dimacs"), false);
-    int amountOfHeuristics = Enum.GetValues(typeof(Heuristics)).Length;
-
-    Task[] tasks = new Task[amountOfHeuristics];
-    int heuristicIterator = 0;
-    foreach (Heuristics h in Enum.GetValues(typeof(Heuristics)))
-    {
-        tasks[heuristicIterator] = Task.Run(() =>
-        {
-            TestDPLL(F.Clone(), h);
-            return 0;
-        });
-        if (heuristicIterator < amountOfHeuristics - 1)
-        {
-            heuristicIterator++;
-        }
-    }
-
-    Task.WaitAll(tasks);
-}
-
-void TestDPLL(Formula F, Heuristics H)
-{
-    var solver = new SatDpllSolver();
-    Stopwatch sw = new Stopwatch();
-    long counter = 0;
-    sw.Start();
-    bool result = solver.IsSatisfiable(F, H);
-    sw.Stop();
-    Console.WriteLine("\n--------------------------------\n" +
-                      "Running Heuristic: " + H + "\n" +
-                      "Satisfiable?: " + (result ? "YES" : "NO") + "\n" +
-                      "DPLL calls:   " + counter + "\n" +
-                      "Time elapsed: " + sw.Elapsed.Minutes + "min " + sw.Elapsed.Seconds + "s " + sw.Elapsed.Milliseconds + "ms");
-}
-
-void ParserTest()
-{
-    Formula f = new();
-    f.ParseFormulaFromFile(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example3.dimacs"), true);
-    SatDpllSolver solver = new();
-    Console.WriteLine("Is " + f + " satisfiable: " + solver.IsSatisfiable(f, Heuristics.MOM));
-    Console.WriteLine(solver.RecursiveCalls);
-}
-
-
-void HeuristicsTest()
+static void HeuristicsTest(string path)
 {
     foreach (Heuristics h in Enum.GetValues(typeof(Heuristics)))
     {
         Formula f = new();
         SatDpllSolver solver = new();
 
-        //if (h == Heuristics.RANDOM) continue;
-
-        Console.WriteLine("----------------------------------------------------");
-
-        f.ParseFormulaFromFile(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example2.dimacs"), false);
+        f.ParseFormulaFromFile(path, false);
         Console.WriteLine("Heuristic: " + h.ToString());
         Console.WriteLine("Formula: [" + f.InputLiterals + "; " + f.InputClauses + "]");
         Console.WriteLine("Is satisfiable: " + solver.IsSatisfiable(f, h));
         Console.WriteLine("Recursive calls: " + solver.RecursiveCalls);
         solver.ResetRecursiveCalls();
+        Console.WriteLine("----------------------------------------------------");
     }
 }
 
 public enum Heuristics
 {
-    //,
-    DLIS,
-    DLCS,
-    MOM,
-    BOHM,
+    Dlis,
+    Dlcs,
+    Mom,
+    Bohm,
     My
 }
 
@@ -135,11 +48,11 @@ internal class SatDpllSolver
     public bool IsSatisfiable(Formula f, Heuristics h)
     {
         RecursiveCalls++;
-        //End conditions
+
+
         if (f.IsEmpty()) return true;
         if (f.HasEmptyClause) return false;
 
-        //Evaluates literals from clauses that contains only one literal
         var x = f.GetFirstSingletonClauseLiteral();
         if (x != null)
         {
@@ -147,7 +60,6 @@ internal class SatDpllSolver
             return IsSatisfiable(f, h);
         }
 
-        //Evaluates pure literals
         var y = f.GetFirstPureLiteral();
         if (y != null)
         {
@@ -155,30 +67,24 @@ internal class SatDpllSolver
             return IsSatisfiable(f, h);
         }
 
-        //Choose literal to evaluate
         var literal = h switch
         {
-            //Heuristics.RANDOM => f.RandomLiteral(),
-            Heuristics.DLIS => f.Dlis(),
-            Heuristics.DLCS => f.Dlcs(),
-            Heuristics.MOM => f.MOM(),
-            Heuristics.BOHM => f.Bohm(),
+            Heuristics.Dlis => f.Dlis(),
+            Heuristics.Dlcs => f.Dlcs(),
+            Heuristics.Mom => f.Mom(),
+            Heuristics.Bohm => f.Bohm(),
             Heuristics.My => f.My(),
             _ => throw new Exception("Heuristic not implemented")
         };
 
-        //Evaluate literal
         var f1 = f.Clone();
         f1.SetLiteral(-literal);
-
         if (IsSatisfiable(f1, h))
         {
             return true;
         }
 
-        //Evaluate literal to false
         f.SetLiteral(literal);
-
         return IsSatisfiable(f, h);
     }
 
@@ -192,124 +98,29 @@ internal class Formula
 {
     public Dictionary<int, int> AllLiterals { get; set; }
 
+    public Dictionary<int, Dictionary<int, int>> Fk { get; set; }
+
     public Dictionary<int, HashSet<Clause>> CountClauses { get; set; }
 
-    public int InputLiterals = 0;
-    public int InputClauses = 0;
-    public bool HasEmptyClause = false;
-    public int ClauseCount = 0;
+    public int InputLiterals;
+    public int InputClauses;
+    public bool HasEmptyClause;
+    public int ClauseCount;
 
     public Formula()
     {
         AllLiterals = new Dictionary<int, int>();
         CountClauses = new Dictionary<int, HashSet<Clause>>();
+        Fk = new Dictionary<int, Dictionary<int, int>>();
     }
 
     public Formula(IEnumerable<Clause> clauses)
     {
         AllLiterals = new Dictionary<int, int>();
         CountClauses = new Dictionary<int, HashSet<Clause>>();
+        Fk = new Dictionary<int, Dictionary<int, int>>();
 
-        foreach (var c in clauses)
-        {
-            if (CountClauses.ContainsKey(c.Literals.Count))
-                CountClauses[c.Literals.Count].Add(c);
-            else
-            {
-                CountClauses[c.Literals.Count] = new() { c };
-            }
-            ClauseCount++;
-        }
-
-        foreach (var c in AllClauses())
-        {
-            foreach (var l in c.Literals)
-            {
-                if (AllLiterals.ContainsKey(l))
-                    AllLiterals[l]++;
-                else
-                    AllLiterals[l] = 1;
-            }
-        }
-    }
-
-    public HashSet<Clause> AllClauses()
-    {
-        return CountClauses.Values.SelectMany(x => x).ToHashSet();
-    }
-
-    public bool IsEmpty()
-    {
-        return ClauseCount == 0;
-    }
-
-    public void SetLiteral(int literal)
-    {
-        if (AllLiterals[literal] <= 0)
-        {
-            Console.WriteLine("Warning! Setting literal that doesn't exists");
-            return;
-        }
-
-        foreach (var c in AllClauses().Where(x => x.Literals.Contains(literal) || x.Literals.Contains(-literal)).ToList())
-        {
-            if (c.Literals.Contains(literal))
-            {
-                CountClauses[c.Literals.Count].Remove(c);
-                ClauseCount--;
-                foreach (var lit in c.Literals)
-                {
-                    AllLiterals[lit]--;
-                }
-            }
-            else
-            {
-                CountClauses[c.Literals.Count].Remove(c);
-
-                c.Literals.Remove(-literal);
-                AllLiterals[-literal]--;
-
-                if (c.Literals.Count == 0)
-                    HasEmptyClause = true;
-
-                if (CountClauses.ContainsKey(c.Literals.Count))
-                    CountClauses[c.Literals.Count].Add(c);
-                else
-                    CountClauses[c.Literals.Count] = new() { c };
-            }
-        }
-    }
-
-    public Formula Clone()
-    {
-        return new Formula(AllClauses().Select(c => c.Clone()).ToList());
-    }
-
-    private int FrequencyK(int literal, int k)
-    {
-        return CountClauses[k].Count(c => c.Literals.Contains(literal));
-    }
-
-    public override string ToString()
-    {
-        StringBuilder sb = new();
-        var empty = true;
-
-        sb.Append('(');
-
-        foreach (var c in AllClauses())
-        {
-            if (empty)
-                empty = false;
-            sb.Append(c);
-            sb.Append(" ^ ");
-        }
-        if (!empty)
-            sb.Remove(sb.Length - 3, 3);
-
-        sb.Append(')');
-
-        return sb.ToString();
+        SetFormulaFromClauses(clauses);
     }
 
     public void ParseFormulaFromFile(string path, bool print)
@@ -317,7 +128,6 @@ internal class Formula
         try
         {
             using StreamReader s = new(path);
-
             string? line;
 
             while ((line = s.ReadLine()) != null)
@@ -370,12 +180,23 @@ internal class Formula
                             else
                                 AllLiterals[number] = 1;
                         }
+                        //CountClauses
                         if (CountClauses.ContainsKey(newClause.Literals.Count))
                             CountClauses[newClause.Literals.Count].Add(newClause);
                         else
                         {
-                            CountClauses[newClause.Literals.Count] = new HashSet<Clause>();
-                            CountClauses[newClause.Literals.Count].Add(newClause);
+                            CountClauses[newClause.Literals.Count] = new HashSet<Clause> { newClause };
+                        }
+                        //FK
+                        if (!Fk.ContainsKey(newClause.Literals.Count))
+                            Fk[newClause.Literals.Count] = new Dictionary<int, int>();
+
+                        foreach (var l in newClause.Literals)
+                        {
+                            if (Fk[newClause.Literals.Count].ContainsKey(l))
+                                Fk[newClause.Literals.Count][l]++;
+                            else
+                                Fk[newClause.Literals.Count][l] = 1;
                         }
 
                         ClauseCount++;
@@ -390,8 +211,106 @@ internal class Formula
         {
             AllLiterals.Clear();
             CountClauses.Clear();
-            Console.WriteLine("Error while parsing file");
+            Console.WriteLine("Error while parsing dimacs file");
             Console.WriteLine(ex.ToString());
+        }
+    }
+
+    public void SetFormulaFromClauses(IEnumerable<Clause> clauses)
+    {
+        foreach (var c in clauses)
+        {
+            if (CountClauses.ContainsKey(c.Literals.Count))
+                CountClauses[c.Literals.Count].Add(c);
+            else
+            {
+                CountClauses[c.Literals.Count] = new HashSet<Clause> { c };
+            }
+            ClauseCount++;
+        }
+
+
+        foreach (var c in AllClauses())
+        {
+            if (!Fk.ContainsKey(c.Literals.Count))
+                Fk[c.Literals.Count] = new Dictionary<int, int>();
+
+            foreach (var l in c.Literals)
+            {
+                if (AllLiterals.ContainsKey(l))
+                    AllLiterals[l]++;
+                else
+                    AllLiterals[l] = 1;
+
+                if (Fk[c.Literals.Count].ContainsKey(l))
+                    Fk[c.Literals.Count][l]++;
+                else
+                    Fk[c.Literals.Count][l] = 1;
+            }
+        }
+    }
+
+    public HashSet<Clause> AllClauses()
+    {
+        return CountClauses.Values.SelectMany(x => x).ToHashSet();
+    }
+
+    public bool IsEmpty()
+    {
+        return ClauseCount == 0;
+    }
+
+    public void SetLiteral(int literal)
+    {
+        if (AllLiterals[literal] <= 0)
+        {
+            Console.WriteLine("Warning! Setting literal that doesn't exists");
+            return;
+        }
+
+        foreach (var c in AllClauses().Where(x => x.Literals.Contains(literal) || x.Literals.Contains(-literal)).ToList())
+        {
+            if (c.Literals.Contains(literal))
+            {
+                CountClauses[c.Literals.Count].Remove(c);
+                ClauseCount--;
+                foreach (var lit in c.Literals)
+                {
+                    AllLiterals[lit]--;
+                    Fk[c.Literals.Count][lit]--;
+                }
+            }
+            else
+            {
+                CountClauses[c.Literals.Count].Remove(c);
+
+                if (!Fk.ContainsKey(c.Literals.Count - 1))
+                    Fk[c.Literals.Count - 1] = new Dictionary<int, int>();
+
+                foreach (var l in c.Literals)
+                {
+                    Fk[c.Literals.Count][l]--;
+
+                    if (Fk[c.Literals.Count - 1].ContainsKey(l))
+                        Fk[c.Literals.Count - 1][l]++;
+                    else
+                        Fk[c.Literals.Count - 1][l] = 1;
+
+                }
+                Fk[c.Literals.Count - 1][-literal]--;
+
+                c.Literals.Remove(-literal);
+
+                AllLiterals[-literal]--;
+
+                if (c.Literals.Count == 0)
+                    HasEmptyClause = true;
+
+                if (CountClauses.ContainsKey(c.Literals.Count))
+                    CountClauses[c.Literals.Count].Add(c);
+                else
+                    CountClauses[c.Literals.Count] = new HashSet<Clause> { c };
+            }
         }
     }
 
@@ -419,7 +338,18 @@ internal class Formula
         return res == 0 ? null : res;
     }
 
-    //DLIS
+    private int GetShortestClause()
+    {
+        var shortest = CountClauses.Keys.First();
+
+        foreach (var c in CountClauses.Keys.Where(c => CountClauses[c].Count > 0 && c < shortest))
+        {
+            shortest = c;
+        }
+
+        return shortest;
+    }
+
     public int Dlis()
     {
         var maxKey = AllLiterals.Keys.First();
@@ -430,10 +360,9 @@ internal class Formula
                 maxKey = l;
         }
 
-        return -maxKey; // TODO minus
+        return -maxKey;
     }
 
-    //DLCS
     public int Dlcs()
     {
         var maxKey = AllLiterals.Keys.First();
@@ -445,27 +374,22 @@ internal class Formula
         }
 
         if (AllLiterals[maxKey] >= AllLiterals[-maxKey])
-            return -maxKey; // TODO minus
+            return -maxKey;
         return maxKey;
     }
 
-
-    //MOM
-    public int MOM()
+    public int Mom()
     {
         var p = AllLiterals.Keys.Count * AllLiterals.Keys.Count + 1;
 
         var shortest = GetShortestClause();
         var maxLiteral = 0;
-        var maxLiteralValue = 0;
-        //Záleží na pořadí čím je literál blíže v celé formuli tím je to rychlejší proč
+        var maxLiteralValue = int.MinValue;
+
         foreach (var l in AllLiterals.Keys.Where(x => CountClauses[shortest].Any(c => c.Literals.Contains(x))))
         {
-            var l1 = 0;
-            var l2 = 0;
-
-            l1 = FrequencyK(l, shortest);
-            l2 = FrequencyK(-l, shortest);
+            var l1 = Fk[shortest][l];
+            var l2 = Fk[shortest].ContainsKey(-l) ? Fk[shortest][-l] : 0;
 
             var num = (l1 + l2) * p + l1 * l2;
             if (num > maxLiteralValue)
@@ -474,83 +398,51 @@ internal class Formula
                 maxLiteral = l;
             }
         }
-        if (maxLiteral == 0) throw new Exception("No MOM");
 
         return maxLiteral;
-
     }
 
-    private int GetShortestClause()
-    {
-        var shortest = CountClauses.Keys.First();
-
-        foreach (var c in CountClauses.Keys)
-        {
-            if (CountClauses[c].Count > 0 && c < shortest)
-                shortest = c;
-        }
-
-        return shortest;
-    }
-
-    //Bohm
     public int Bohm()
     {
         const int p1 = 1;
         const int p2 = 2;
 
-        int maxLiteral = 0;
-        int maxLiteralValue = 0;
-
+        var maxLiteral = 0;
+        var maxLiteralValue = int.MinValue;
         foreach (var l in AllLiterals.Keys)
         {
             var sum = 0;
 
-            //For all clauses len
             for (var i = GetShortestClause(); i <= CountClauses.Keys.Max(); i++)
             {
                 if (CountClauses[i].Count <= 0) continue;
-                //Spočítám frekvence literálu v kaluzulích délky i
-                var l1 = 0;
-                var l2 = 0;
-                foreach (var c in CountClauses[i])
-                {
-                    if (c.Literals.Contains(l))
-                        l1++;
-                    else if (c.Literals.Contains(-l))
-                        l2++;
-                }
 
+                var l1 = Fk[i].ContainsKey(l) ? Fk[i][l] : 0;
+                var l2 = Fk[i].ContainsKey(-l) ? Fk[i][-l] : 0;
                 sum += p1 * Math.Max(l1, l2) + p2 * Math.Min(l1, l2);
             }
+
             if (sum > maxLiteralValue)
             {
                 maxLiteral = l;
                 maxLiteralValue = sum;
             }
         }
-        if (maxLiteral == 0)
-            throw new Exception("Bohm: maxLiteral == 0");
+
         return maxLiteral;
     }
 
-    //MY find longest clause, foreach longest clause find most frequent literal
     public int My()
     {
-        int maxLiteral = 0;
-        int maxLiteralValue = 0;
+        var maxLiteral = 0;
+        var maxLiteralValue = 0;
 
-        var longestClauses = CountClauses[GetShortestClause()]; //Collection of longest clauses
+        var longestClauses = CountClauses[GetShortestClause()];
         var literals = longestClauses.SelectMany(x => x.Literals).ToHashSet();
 
         foreach (var l in literals)
         {
-            var count = 0;
-            foreach (var c in longestClauses)
-            {
-                if (c.Literals.Contains(l))
-                    count++;
-            }
+            var count = longestClauses.Count(c => c.Literals.Contains(l));
 
             if (count > maxLiteralValue)
             {
@@ -564,22 +456,31 @@ internal class Formula
         return -maxLiteral;
     }
 
-    private int GetLongestClause()
+    public Formula Clone()
     {
-        var longest = 0;
-
-        foreach (var c in CountClauses.Keys)
-        {
-            if (CountClauses[c].Count > 0 && c > longest)
-                longest = c;
-        }
-
-        return longest;
+        return new Formula(AllClauses().Select(c => c.Clone()).ToList());
     }
 
-    public int RandomLiteral()
+    public override string ToString()
     {
-        return AllLiterals.ElementAt(Random.Shared.Next(AllLiterals.Count)).Key;
+        StringBuilder sb = new();
+        var empty = true;
+
+        sb.Append('(');
+
+        foreach (var c in AllClauses())
+        {
+            if (empty)
+                empty = false;
+            sb.Append(c);
+            sb.Append(" ^ ");
+        }
+        if (!empty)
+            sb.Remove(sb.Length - 3, 3);
+
+        sb.Append(')');
+
+        return sb.ToString();
     }
 }
 
