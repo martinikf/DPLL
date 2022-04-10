@@ -1,5 +1,8 @@
-﻿using System.Text;
+﻿//TODO literals in order from original formula
+using System.Diagnostics;
+using System.Text;
 
+//AsyncTest();
 HeuristicsTest();
 //ParserTest();
 //StructuresTests();
@@ -41,13 +44,51 @@ void StructuresTests()
 
 }
 
+void AsyncTest()
+{
+    Formula F = new Formula();
+    F.ParseFormulaFromFile(Path.Combine(Environment.CurrentDirectory, @"CNF", "Example3.dimacs"), false);
+    int amountOfHeuristics = Enum.GetValues(typeof(Heuristics)).Length;
+
+    Task[] tasks = new Task[amountOfHeuristics];
+    int heuristicIterator = 0;
+    foreach (Heuristics h in Enum.GetValues(typeof(Heuristics)))
+    {
+        tasks[heuristicIterator] = Task.Run(() =>
+        {
+            TestDPLL(F.Clone(), h);
+            return 0;
+        });
+        if (heuristicIterator < amountOfHeuristics - 1)
+        {
+            heuristicIterator++;
+        }
+    }
+
+    Task.WaitAll(tasks);
+}
+
+void TestDPLL(Formula F, Heuristics H)
+{
+    var solver = new SatDpllSolver();
+    Stopwatch sw = new Stopwatch();
+    long counter = 0;
+    sw.Start();
+    bool result = solver.IsSatisfiable(F, H);
+    sw.Stop();
+    Console.WriteLine("\n--------------------------------\n" +
+                      "Running Heuristic: " + H + "\n" +
+                      "Satisfiable?: " + (result ? "YES" : "NO") + "\n" +
+                      "DPLL calls:   " + counter + "\n" +
+                      "Time elapsed: " + sw.Elapsed.Minutes + "min " + sw.Elapsed.Seconds + "s " + sw.Elapsed.Milliseconds + "ms");
+}
 
 void ParserTest()
 {
     Formula f = new();
-    f.ParseFormulaFromFile(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example4.dimacs"), true);
+    f.ParseFormulaFromFile(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example3.dimacs"), true);
     SatDpllSolver solver = new();
-    Console.WriteLine("Is " + f + " satisfiable: " + solver.IsSatisfiable(f, Heuristics.DLCS));
+    Console.WriteLine("Is " + f + " satisfiable: " + solver.IsSatisfiable(f, Heuristics.MOM));
     Console.WriteLine(solver.RecursiveCalls);
 }
 
@@ -59,7 +100,7 @@ void HeuristicsTest()
         Formula f = new();
         SatDpllSolver solver = new();
 
-        if (h == Heuristics.RANDOM) continue;
+        //if (h == Heuristics.RANDOM) continue;
 
         Console.WriteLine("----------------------------------------------------");
 
@@ -74,7 +115,7 @@ void HeuristicsTest()
 
 public enum Heuristics
 {
-    RANDOM,
+    //,
     DLIS,
     DLCS,
     MOM,
@@ -117,7 +158,7 @@ internal class SatDpllSolver
         //Choose literal to evaluate
         var literal = h switch
         {
-            Heuristics.RANDOM => f.RandomLiteral(),
+            //Heuristics.RANDOM => f.RandomLiteral(),
             Heuristics.DLIS => f.Dlis(),
             Heuristics.DLCS => f.Dlcs(),
             Heuristics.MOM => f.MOM(),
@@ -190,11 +231,6 @@ internal class Formula
                     AllLiterals[l] = 1;
             }
         }
-    }
-
-    public HashSet<int> UniqueLiterals()
-    {
-        return AllLiterals.Keys.ToHashSet();
     }
 
     public HashSet<Clause> AllClauses()
@@ -329,7 +365,6 @@ internal class Formula
                             if (newClause.Literals.Contains(number)) continue;
 
                             newClause.Literals.Add(number);
-
                             if (AllLiterals.ContainsKey(number))
                                 AllLiterals[number]++;
                             else
@@ -395,7 +430,7 @@ internal class Formula
                 maxKey = l;
         }
 
-        return maxKey; // TODO minus
+        return -maxKey; // TODO minus
     }
 
     //DLCS
@@ -414,31 +449,23 @@ internal class Formula
         return maxKey;
     }
 
+
     //MOM
     public int MOM()
     {
         var p = AllLiterals.Keys.Count * AllLiterals.Keys.Count + 1;
 
-        var shortestClauses = CountClauses[GetShortestClause()]; //Collection of shortest clauses
-        var literals = shortestClauses.SelectMany(x => x.Literals).ToHashSet(); //Unique literals in shortest clauses
-
-        int maxLiteral = 0;
-        int maxLiteralValue = 0;
-
-
-
-        foreach (var l in literals)
+        var shortest = GetShortestClause();
+        var maxLiteral = 0;
+        var maxLiteralValue = 0;
+        //Záleží na pořadí čím je literál blíže v celé formuli tím je to rychlejší proč
+        foreach (var l in AllLiterals.Keys.Where(x => CountClauses[shortest].Any(c => c.Literals.Contains(x))))
         {
             var l1 = 0;
             var l2 = 0;
 
-            foreach (var c in shortestClauses)
-            {
-                if (c.Literals.Contains(l))
-                    l1++;
-                else if (c.Literals.Contains(-l))
-                    l2++;
-            }
+            l1 = FrequencyK(l, shortest);
+            l2 = FrequencyK(-l, shortest);
 
             var num = (l1 + l2) * p + l1 * l2;
             if (num > maxLiteralValue)
@@ -447,8 +474,10 @@ internal class Formula
                 maxLiteral = l;
             }
         }
+        if (maxLiteral == 0) throw new Exception("No MOM");
 
         return maxLiteral;
+
     }
 
     private int GetShortestClause()
@@ -478,7 +507,7 @@ internal class Formula
             var sum = 0;
 
             //For all clauses len
-            for (var i = 2; i <= CountClauses.Keys.Max(); i++)
+            for (var i = GetShortestClause(); i <= CountClauses.Keys.Max(); i++)
             {
                 if (CountClauses[i].Count <= 0) continue;
                 //Spočítám frekvence literálu v kaluzulích délky i
@@ -511,7 +540,7 @@ internal class Formula
         int maxLiteral = 0;
         int maxLiteralValue = 0;
 
-        var longestClauses = CountClauses[GetLongestClause()]; //Collection of longest clauses
+        var longestClauses = CountClauses[GetShortestClause()]; //Collection of longest clauses
         var literals = longestClauses.SelectMany(x => x.Literals).ToHashSet();
 
         foreach (var l in literals)
@@ -532,7 +561,7 @@ internal class Formula
 
         if (maxLiteral == 0)
             throw new Exception("My: maxLiteral == 0");
-        return maxLiteral;
+        return -maxLiteral;
     }
 
     private int GetLongestClause()
