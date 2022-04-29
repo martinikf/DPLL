@@ -1,13 +1,14 @@
 ﻿//TODO multi-threading
 using System.Text;
-HeuristicsTest(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example2.dimacs"));
+//HeuristicsTest(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example2.dimacs"));
 
 while (true)
 {
-    Console.WriteLine("Input dimacs file path: ");
+    Console.WriteLine("Input dimacs absolute file path: ");
     var path = Console.ReadLine();
     if (path != null)
         HeuristicsTest(path);
+    Console.WriteLine("-----------------");
 }
 
 static void HeuristicsTest(string path)
