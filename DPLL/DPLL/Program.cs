@@ -1,6 +1,6 @@
 ﻿//TODO multi-threading
 using System.Text;
-HeuristicsTest(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example3.dimacs"));
+HeuristicsTest(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example2.dimacs"));
 
 while (true)
 {
@@ -21,7 +21,7 @@ static void HeuristicsTest(string path)
         Console.WriteLine("Heuristic: " + h.ToString());
         Console.WriteLine("Formula: [" + f.InputLiterals + "; " + f.InputClauses + "]");
         Console.WriteLine("Is satisfiable: " + solver.IsSatisfiable(f, h));
-        Console.WriteLine("Recursive calls: " + solver.RecursiveCalls);
+        Console.WriteLine("Recursive calls: " + $"{solver.RecursiveCalls:N0}");
         solver.ResetRecursiveCalls();
         Console.WriteLine("----------------------------------------------------");
     }
