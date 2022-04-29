@@ -1,6 +1,6 @@
 ﻿//TODO multi-threading
 using System.Text;
-HeuristicsTest(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example2.dimacs"));
+HeuristicsTest(Path.Combine(Environment.CurrentDirectory, @"CNF\", "Example3.dimacs"));
 
 while (true)
 {
